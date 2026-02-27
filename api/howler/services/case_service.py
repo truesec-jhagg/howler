@@ -25,12 +25,24 @@ CREATED_CASES = Counter(f"{APP_NAME.replace('-', '_')}_created_cases_total", "Th
 @overload
 def create_case(*, case: Case) -> dict[str, Any]: ...
 
+@overload
+def create_case(*, list_items: list[dict[str, str]]) -> dict[str, Any]: ...
+@overload
+def create_case(*, list_items: list[dict[str, str]], overview: str) -> dict[str, Any]: ...
 
 @overload
 def create_case(title: str, summary: str, user: str = "") -> dict[str, Any]: ...
 
 
-def create_case(title: str = "", summary: str = "", user: str = "", *, case: Case | None = None) -> dict[str, Any]:  # type: ignore
+def create_case(
+    title: str = "",
+    summary: str = "",
+    user: str = "",
+    *,
+    list_items: list[dict[str, str]] | None = None,
+    overview: str = "",
+    case: Case | None = None,
+) -> dict[str, Any]:  # type: ignore
     """Create a new case in the datastore.
 
     Args:
@@ -46,7 +58,7 @@ def create_case(title: str = "", summary: str = "", user: str = "", *, case: Cas
         ResourceExists: If a case with the same ID already exists
     """
     if case is None:
-        case = Case({"title": title, "summary": summary})
+        case = Case({"title": title, "summary": summary, "overview": overview})
         items = []
     else:
         items = list(case.items)
@@ -59,6 +71,21 @@ def create_case(title: str = "", summary: str = "", user: str = "", *, case: Cas
 
     for item in items:
         append_case_item(case.case_id, item=item)
+
+    if list_items is not None:
+        for list_item in list_items:
+            new_case_item = CaseItem(
+                {
+                    "id": list_item["id"],
+                    "type": CaseItemTypes[list_item["type"].upper()],
+                    "value": list_item["value"],
+                    "path": "related/",
+                }
+            )
+            append_case_item(
+                case.case_id,
+                item=new_case_item,
+            )
 
     if items:
         return datastore().case.get_if_exists(case.case_id, as_obj=False)
@@ -278,7 +305,7 @@ def append_case_item(  # noqa: C901
 
         item = CaseItem({"type": item_type, "value": item_value, "path": item_path})
 
-    match item_type:
+    match item.type:
         case CaseItemTypes.HIT:
             append_hit(case_id, item)
         case CaseItemTypes.OBSERVABLE:
